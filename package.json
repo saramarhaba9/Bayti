@@ -1,0 +1,15 @@
+{
+  "name": "bayti",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/engine.test.js tests/validation.test.js tests/shopping.test.js",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-bayti \"node --test tests/emulator/rules.spec.js\"",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.1.0",
+    "firebase-tools": "^15.34.1"
+  }
+}
