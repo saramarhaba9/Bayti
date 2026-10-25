@@ -20,7 +20,7 @@ export async function connect(hid, uid) {
   const col = (...p) => collection(db, 'households', hid, ...p);
   const ref = (...p) => doc(db, 'households', hid, ...p);
   const first = new Set(); const pend = {}; const subs = {};
-  let weekId = null; let timer = null; let busy = false; let again = false; let dead = false;
+  let lastSig = ''; let lastAt = 0; let weekId = null; let timer = null; let busy = false; let again = false; let dead = false;
   const sref = (id) => ref('weeks', weekId, 'shoppingItems', id);
   const syncErr = () => store.setSync({ error: '⚠️ تعذّرت المزامنة' });
 
@@ -73,8 +73,12 @@ export async function connect(hid, uid) {
     try {
       const cat = new Map(s.ingredients.map((i) => [i.id, i.category]));
       const gen = aggregate(s.meals, s.inventory).items.map((g) => ({ ...g, category: cat.get(g.ingredientId) ?? 'other' }));
-      const { sets, deletes } = planShoppingWrites(gen, s.shopping);
-      if (sets.length || deletes.length) {
+      const plan = planShoppingWrites(gen, s.shopping);
+      const { sets, deletes } = plan;
+      const sig = JSON.stringify(plan);
+      // Safety brake: never re-send an identical plan within 60 s (prevents runaway writes / quota burn).
+      if ((sets.length || deletes.length) && !(sig === lastSig && Date.now() - lastAt < 60000)) {
+        lastSig = sig; lastAt = Date.now();
         const batch = writeBatch(db);
         for (const { id, data, isNew } of sets) batch.set(sref(id), { ...data, updatedAt: now(), ...(isNew && { createdAt: now() }) }, { merge: true });
         deletes.forEach((id) => batch.delete(sref(id)));
