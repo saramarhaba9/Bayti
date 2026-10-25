@@ -1,0 +1,101 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMember(hid) {
+      return signedIn() && exists(/databases/$(db)/documents/households/$(hid)/members/$(request.auth.uid));
+    }
+    function ownerOf(hid) {
+      return get(/databases/$(db)/documents/households/$(hid)).data.ownerId == request.auth.uid;
+    }
+    function verified() { return request.auth.token.email_verified == true; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function myInvite() { return get(/databases/$(db)/documents/invites/$(myEmail())).data; }
+    function validName(n) { return n is string && n.size() > 0 && n.size() <= 60; }
+    function validRecipe() {
+      let d = request.resource.data;
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.defaultServings is number && d.defaultServings > 0
+        && d.ingredients is list && d.instructions is list;
+    }
+    function validMeal() {
+      let d = request.resource.data;
+      return d.recipeName is string && d.servings is number && d.servings > 0
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.mealType in ['breakfast', 'lunch', 'dinner', 'snack']
+        && d.ingredientsSnapshot is list;
+    }
+    function validInvite(email) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['householdId', 'email', 'invitedBy', 'createdAt', 'expiresAt'])
+        && d.email == email && email == email.lower()
+        && d.invitedBy == request.auth.uid
+        && d.householdId is string && d.expiresAt is timestamp;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['displayName', 'householdId', 'createdAt'])
+        && request.resource.data.householdId == null
+        && validName(request.resource.data.displayName);
+      allow update: if signedIn() && request.auth.uid == uid && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+          && validName(request.resource.data.displayName))
+        // one-time link to a household, only if the member document exists after this write
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['householdId'])
+          && resource.data.householdId == null
+          && request.resource.data.householdId is string
+          && getAfter(/databases/$(db)/documents/households/$(request.resource.data.householdId)/members/$(uid)).data.userId == uid));
+      allow delete: if false;
+    }
+
+    // Invite id = invitee's lowercase email. Only that verified email can read/consume it; only the household owner can create it.
+    match /invites/{email} {
+      allow get: if signedIn() && verified() && myEmail() == email;
+      allow create: if signedIn() && validInvite(email) && ownerOf(request.resource.data.householdId);
+      allow update: if signedIn() && validInvite(email) && resource.data.invitedBy == request.auth.uid
+        && ownerOf(request.resource.data.householdId);
+      allow delete: if signedIn() && ((verified() && myEmail() == email) || resource.data.invitedBy == request.auth.uid);
+    }
+
+    match /households/{hid} {
+      allow read: if isMember(hid);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'ownerId', 'defaultWeekStart', 'createdAt', 'updatedAt'])
+        && request.resource.data.ownerId == request.auth.uid && validName(request.resource.data.name);
+      allow update, delete: if false; // owner can never be reassigned
+
+      match /members/{uid} {
+        allow read: if isMember(hid);
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['userId', 'role', 'displayName', 'joinedAt'])
+          && request.resource.data.userId == uid && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() <= 60 && (
+            // creator of a brand-new household
+            (request.resource.data.role == 'owner'
+              && !exists(/databases/$(db)/documents/households/$(hid))
+              && getAfter(/databases/$(db)/documents/households/$(hid)).data.ownerId == uid)
+            // invited member: verified email matches an unexpired invite for THIS household
+            || (request.resource.data.role == 'member' && verified()
+              && exists(/databases/$(db)/documents/invites/$(myEmail()))
+              && myInvite().householdId == hid && myInvite().expiresAt > request.time));
+        allow update, delete: if false; // roles can never change
+      }
+      match /ingredients/{id} { allow read, write: if isMember(hid); }
+      match /inventory/{id} { allow read, write: if isMember(hid); }
+      match /recipes/{id} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid) && validRecipe();
+      }
+      match /weeks/{wid} {
+        allow read, write: if isMember(hid);
+        match /meals/{id} {
+          allow read, delete: if isMember(hid);
+          allow create, update: if isMember(hid) && validMeal();
+        }
+        match /shoppingItems/{id} { allow read, write: if isMember(hid); }
+      }
+    }
+  }
+}
