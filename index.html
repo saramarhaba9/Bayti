@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>بيتي | Bayti</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <span>🌿 بيتي | Bayti</span>
+    <div class="hdr">
+      <span id="sync" aria-live="polite"></span>
+      <a href="#/history" aria-label="الأسابيع السابقة">🗂️</a>
+      <a href="#/household" aria-label="الأسرة والحساب">👨‍👩‍👧</a>
+    </div>
+  </header>
+  <main id="view" tabindex="-1"></main>
+  <nav class="nav" aria-label="التنقل الرئيسي">
+    <a href="#/home"><span aria-hidden="true">🏠</span>الرئيسية</a>
+    <a href="#/planner"><span aria-hidden="true">📅</span>طبخات الأسبوع</a>
+    <a href="#/shopping"><span aria-hidden="true">🛒</span>قائمة التسوق</a>
+    <a href="#/recipes"><span aria-hidden="true">📖</span>الوصفات</a>
+    <a href="#/inventory"><span aria-hidden="true">📦</span>مخزون المنزل</a>
+  </nav>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
