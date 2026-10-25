@@ -6,7 +6,11 @@ const norm = (g) => ({
   ...Object.fromEntries(FIELDS.map((k) => [k, g[k]])),
   sourceType: 'generated', sources: [...(g.sources ?? [])].sort(bySrc), orphaned: !!g.orphaned,
 });
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Key-order-independent comparison: Firestore returns map fields (e.g. sources[]) in a different key order than we write them.
+const canon = (v) => (Array.isArray(v) ? `[${v.map(canon).join(',')}]`
+  : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}`
+  : JSON.stringify(v));
+const same = (a, b) => canon(a) === canon(b);
 
 export function planShoppingWrites(generated, existing = []) {
   const byId = new Map(existing.map((e) => [e.id, e]));
